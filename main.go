@@ -3,12 +3,12 @@ package main
 import (
 	"bytes"
 	_ "embed"
-	"fmt"
 	"image"
 	_ "image/png"
 	"log"
 	"math"
 	"os"
+	"time"
 
 	"github.com/nsf/termbox-go"
 )
@@ -16,9 +16,10 @@ import (
 //go:embed "img/16x16GreenBall.png"
 var grenRGBA []byte
 
+/*
 //go:embed "img/16x16RedBall.png"
 var redRGBA []byte
-
+*/
 type ByteReadCloser struct {
 	*bytes.Reader
 }
@@ -27,8 +28,117 @@ func (b *ByteReadCloser) Close() error {
 	return nil
 }
 
-func main() {
+type screenBuffer struct {
+	animFr  int
+	bufDraw int
+	bufCopy int
+	xM, yM  int
+	frame   [9][][]termbox.Cell
+}
 
+func (s *screenBuffer) initBufferGrid() {
+	xM, yM := termbox.Size()
+	for f := 0; f < s.animFr; f++ {
+		for x := 0; x <= xM; x++ {
+			for y := 0; y <= yM; y++ {
+				s.frame[f][x][y].Ch = 0x254
+			}
+
+		}
+	}
+
+}
+func (s *screenBuffer) swapRGB() {
+	f := s.bufDraw
+	if f >= s.animFr {
+		f = f - s.animFr
+	}
+	//n := f % 3
+	//if n == 0 {
+	for y := 0; y < s.yM; y++ {
+		for x := 0; x < s.xM; x++ {
+			r, g, b := termbox.AttributeToRGB(s.frame[f][x][y].Bg)
+			s.frame[f][x][y].Bg = termbox.RGBToAttribute(b, r, g)
+			r, g, b = termbox.AttributeToRGB(s.frame[f][x][y].Fg)
+			s.frame[f][x][y].Fg = termbox.RGBToAttribute(b, r, g)
+
+		}
+	}
+}
+
+func (s *screenBuffer) getRGBbg(x int, y int) (uint8, uint8, uint8) {
+	cell := s.frame[s.bufDraw][x][y]
+
+	return termbox.AttributeToRGB(cell.Bg)
+
+}
+func (s *screenBuffer) getRGBfg(x int, y int) (uint8, uint8, uint8) {
+	cell := s.frame[s.bufDraw][x][y]
+
+	return termbox.AttributeToRGB(cell.Fg)
+
+}
+
+func (s *screenBuffer) setFrame2Draw(f int) {
+	if f >= s.animFr {
+		f = f - s.animFr
+	}
+	s.bufDraw = f
+}
+func (s *screenBuffer) setFrame2Copy(f int) {
+	if f >= s.animFr {
+		f = f - s.animFr
+	}
+	s.bufCopy = f
+}
+
+func (scBf *screenBuffer) SetCell(x, y int, r rune, fg termbox.Attribute, bg termbox.Attribute) {
+
+	scBf.frame[scBf.bufDraw][x][y].Bg = bg
+	scBf.frame[scBf.bufDraw][x][y].Fg = fg
+	scBf.frame[scBf.bufDraw][x][y].Ch = r
+
+}
+
+// SetBg - sets background color for screen buffer at [x][y] loacation
+func (scBf *screenBuffer) SetBg(x, y int, bg termbox.Attribute) {
+	scBf.frame[scBf.bufDraw][x][y].Bg = bg
+}
+
+// SetFg - sets foreground color for screen buffer at [x][y] loacation
+func (scBf *screenBuffer) SetFg(x, y int, fg termbox.Attribute) {
+	scBf.frame[scBf.bufDraw][x][y].Fg = fg
+}
+
+// SetCh - sets rune character for screen buffer at [x][y] loacation
+func (scBf *screenBuffer) SetCh(x, y int, r rune) {
+	scBf.frame[scBf.bufDraw][x][y].Ch = r
+}
+
+// SetFgBg - sets both foreground and background colors at [x][y] location in a single func call
+func (scBf *screenBuffer) SetFgBg(x, y int, fg, bg termbox.Attribute) {
+	scBf.frame[scBf.bufDraw][x][y].Fg = fg
+	scBf.frame[scBf.bufDraw][x][y].Bg = bg
+}
+
+// copy2termboxBuffer makes a copy of certain buffer to termbox virtual screen
+func (scBf *screenBuffer) copy2termboxBuffer(f int) {
+	if f >= scBf.animFr {
+		f = f - scBf.animFr
+	}
+
+	scBf.bufCopy = f
+	for i, v := range scBf.frame[f] {
+		for j, q := range v {
+
+			termbox.SetCell(i, j, q.Ch, q.Fg, q.Bg)
+
+		}
+
+	}
+}
+func main() {
+	//initialization of termbox
 	err := termbox.Init()
 	if err != nil {
 		log.Println("init error", err)
@@ -36,32 +146,40 @@ func main() {
 	} else {
 		termbox.SetOutputMode(termbox.OutputRGB)
 	}
-	xM, yM := termbox.Size()
+	defer termbox.Close()
+	xM, yM := termbox.Size() // check the initial console resolution
+
+	//Creating buffers based on terminal size
+
+	var tBuffer screenBuffer
+	tBuffer.xM = xM
+	tBuffer.yM = yM
+	tBuffer.animFr = 9
+	for i := 0; i < tBuffer.animFr; i++ {
+		tBuffer.frame[i] = make([][]termbox.Cell, xM)
+		for j := 0; j < xM; j++ {
+			tBuffer.frame[i][j] = make([]termbox.Cell, yM)
+			for k := 0; k < yM; k++ {
+				tBuffer.frame[i][j][k] = termbox.Cell{
+					Ch: '▄', // U+2584 to kod znaku '▄' w Unicode
+					Fg: termbox.RGBToAttribute(0, 0, 0),
+					Bg: termbox.RGBToAttribute(0, 0, 0),
+				}
+			}
+		}
+	}
 
 	//loading and decoding image embeded into memory location as a slice of bytes
 	reader := &ByteReadCloser{
 		bytes.NewReader(grenRGBA),
 	}
 	defer reader.Close()
-	imgG, format, err := image.Decode(reader)
+	imgG, _, err := image.Decode(reader)
 	if err != nil {
 		log.Fatalln("Cannot decode file:", err)
 	}
-	rysuj(xM, yM, 0x2584)
-	informacja := fmt.Sprintf("x:%d, y:%d, %s", imgG.Bounds().Size().X, imgG.Bounds().Size().Y, format)
 
-	for i, nap := range informacja {
-		termbox.SetChar(i, 10, nap)
-	}
-	defer termbox.Close()
-
-	for oy := 0; oy < yM; oy++ {
-		for ox := 0; ox < xM; ox++ {
-			termbox.SetBg(ox, oy, 6)
-			termbox.SetFg(ox, oy, 6)
-		}
-	}
-
+	//create sine cosine tables for Lissajous figures
 	var o float64
 	pi2 := 2 * math.Pi
 	var xSine []float64   //sin table
@@ -80,18 +198,28 @@ func main() {
 		yCosine = append(yCosine, yValue)
 	}
 
+	//exit program by key press or mouse button press
 	go func() {
 		termbox.PollEvent()
 		termbox.Close()
 		os.Exit(0)
 	}()
-	it := len(xSine) / 5
-	jt := len(yCosine) / 2
+
+	it := len(xSine)/2 + 220
+	jt := len(yCosine) / 4
 	edgeX := len(xSine) - 1
 	edgeY := len(yCosine) - 1
+	frame := 0
+
 	for {
-		rysujKule(int(xSine[it]), int(yCosine[jt]), imgG)
-		it = it + 1
+		start := time.Now()
+		//imgG = imgG
+		//rysujKule(int(xSine[it]), int(yCosine[jt]), imgG)
+		tBuffer.setFrame2Draw(frame)
+		tBuffer.drawBall(int(xSine[it]), int(yCosine[jt]), imgG)
+		tBuffer.copy2termboxBuffer(frame)
+		frame++
+		it = it + 2
 		if it > edgeX {
 			it = it - edgeX
 		}
@@ -99,11 +227,12 @@ func main() {
 		jt = jt + 1
 		if jt > edgeY {
 			jt = jt - edgeY
-			//time.Sleep(10 * time.Millisecond)
-			termbox.Flush()
+
 		}
 		//it = it - 1
 
+		//termbox.SetCell(xM, yM-1, 'A', 0, 0)
+		termbox.Flush()
 		if it > edgeX {
 			it = it - edgeX
 		}
@@ -111,41 +240,22 @@ func main() {
 		if jt > edgeY {
 			jt = jt - edgeY
 		}
+		tBuffer.swapRGB()
+		if frame >= tBuffer.animFr {
+			frame = frame - tBuffer.animFr
+		}
+		duration := time.Since(start)
+		var limit int64 = 17000
+		spent := duration.Microseconds()
+		if (limit - spent) > 33 {
+			wait := time.Duration(limit-spent) * time.Microsecond
+			time.Sleep(wait)
+		}
+
 	}
-
-	/*
-		for i, c := range fmt.Sprintf("xElem:%d, yElem:%d", len(xSine), len(yCosine)) {
-			termbox.SetCell(i, 5, c, 0, 0)
-		}*/
-	termbox.Flush()
-	termbox.PollEvent()
-	termbox.SetOutputMode(termbox.Output256)
-
 }
 
-func rysuj(x, y int, r rune) {
-	//zcolor := 0
-	var sliceColor []termbox.Attribute
-	sliceColor = append(sliceColor, termbox.RGBToAttribute(0, 0, 0))
-	sliceColor = append(sliceColor, termbox.RGBToAttribute(255, 255, 255))
-	a, b := 0, 1
-	z := a%2 + 1
-	for oy := 0; oy < y; oy++ {
-
-		for ox := 0; ox < x; ox++ {
-
-			termbox.SetCell(ox, oy, r, sliceColor[a], sliceColor[b])
-			a, b = b, a
-
-		}
-		if (x % 2) == z {
-			a, b = b, a
-		}
-	}
-
-}
-
-func rysujKule(relx, rely int, img image.Image) {
+func (s *screenBuffer) drawBall(relx, rely int, img image.Image) {
 
 	for y := 0; y < 8; y++ {
 		z, q := 1, 0
@@ -154,14 +264,28 @@ func rysujKule(relx, rely int, img image.Image) {
 		}
 		for x := 0; x < 16; x++ {
 			r, g, b, a := img.At(x, 2*y+q).RGBA()
-
-			if (a >> 8) > 128 {
-				termbox.SetBg(x+relx, y+rely/2+q, termbox.RGBToAttribute(uint8(r>>8), uint8(g>>8), uint8(b>>8)))
-			}
+			r, g, b = r, g, b
+			if (a >> 8) >= 127 {
+				s.SetBg(x+relx, y+rely/2+q, termbox.RGBToAttribute(uint8(r>>8), uint8(g>>8), uint8(b>>8)))
+			} /* else {
+				ar, ab, ag := s.getRGBbg(x+relx, y+rely/2+q)
+				cr := ((65535-a)/65535)*(uint32(ab)<<8) + (a/65535)*r
+				cg := ((65535-a)/65535)*(uint32(ar)<<8) + (a/65535)*g
+				cb := ((65535-a)/65535)*(uint32(ag)<<8) + (a/65535)*b
+				s.SetBg(x+relx, y+rely/2+q, termbox.RGBToAttribute(uint8(cr>>8), uint8(cg>>8), uint8(cb>>8)))
+			}*/
 			r, g, b, a = img.At(x, 2*y+z).RGBA()
-			if (a >> 8) > 128 {
-				termbox.SetFg(x+relx, y+rely/2, termbox.RGBToAttribute(uint8(r>>8), uint8(g>>8), uint8(b>>8)))
-			}
+			r, g, b = r, g, b
+			if (a >> 8) >= 127 {
+				s.SetFg(x+relx, y+rely/2, termbox.RGBToAttribute(uint8(r>>8), uint8(g>>8), uint8(b>>8)))
+			} /*else {
+				ar, ab, ag := s.getRGBfg(x+relx, y+rely/2)
+				cr := ((65535-a)/65535)*(uint32(ab)<<8) + (a/65535)*r
+				cg := ((65535-a)/65535)*(uint32(ar)<<8) + (a/65535)*g
+				cb := ((65535-a)/65535)*(uint32(ag)<<8) + (a/65535)*b
+				s.SetFg(x+relx, y+rely/2, termbox.RGBToAttribute(uint8(cr>>8), uint8(cg>>8), uint8(cb>>8)))
+
+			}*/
 		}
 	}
 }
