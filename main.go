@@ -53,8 +53,6 @@ func (s *screenBuffer) swapRGB() {
 	if f >= s.animFr {
 		f = f - s.animFr
 	}
-	//n := f % 3
-	//if n == 0 {
 	for y := 0; y < s.yM; y++ {
 		for x := 0; x < s.xM; x++ {
 			r, g, b := termbox.AttributeToRGB(s.frame[f][x][y].Bg)
@@ -205,51 +203,53 @@ func main() {
 		os.Exit(0)
 	}()
 
-	it := len(xSine)/2 + 220
-	jt := len(yCosine) / 4
+	it := len(xSine) / 8
+	jt := len(yCosine) / 12
 	edgeX := len(xSine) - 1
 	edgeY := len(yCosine) - 1
 	frame := 0
+	start := time.Now()
 
 	for {
-		start := time.Now()
+
 		//imgG = imgG
 		//rysujKule(int(xSine[it]), int(yCosine[jt]), imgG)
 		tBuffer.setFrame2Draw(frame)
 		tBuffer.drawBall(int(xSine[it]), int(yCosine[jt]), imgG)
 		tBuffer.copy2termboxBuffer(frame)
-		frame++
-		it = it + 2
+		frame++     //next frame animation
+		it = it + 2 //x sine frequency
 		if it > edgeX {
 			it = it - edgeX
 		}
 
-		jt = jt + 1
+		jt = jt + 1 //y cosine frequency
 		if jt > edgeY {
 			jt = jt - edgeY
 
-		}
-		//it = it - 1
-
-		//termbox.SetCell(xM, yM-1, 'A', 0, 0)
-		termbox.Flush()
-		if it > edgeX {
-			it = it - edgeX
-		}
-
-		if jt > edgeY {
-			jt = jt - edgeY
-		}
-		tBuffer.swapRGB()
-		if frame >= tBuffer.animFr {
-			frame = frame - tBuffer.animFr
 		}
 		duration := time.Since(start)
-		var limit int64 = 17000
+		var limit int64 = 16666
 		spent := duration.Microseconds()
-		if (limit - spent) > 33 {
+		if (limit - spent) > 100 {
 			wait := time.Duration(limit-spent) * time.Microsecond
 			time.Sleep(wait)
+		}
+		start = time.Now()
+		termbox.Flush()
+		tBuffer.swapRGB()
+
+		//control indices
+		if it > edgeX {
+			it = it - edgeX
+		}
+
+		if jt > edgeY {
+			jt = jt - edgeY
+		}
+
+		if frame >= tBuffer.animFr {
+			frame = frame - tBuffer.animFr
 		}
 
 	}
@@ -267,25 +267,12 @@ func (s *screenBuffer) drawBall(relx, rely int, img image.Image) {
 			r, g, b = r, g, b
 			if (a >> 8) >= 127 {
 				s.SetBg(x+relx, y+rely/2+q, termbox.RGBToAttribute(uint8(r>>8), uint8(g>>8), uint8(b>>8)))
-			} /* else {
-				ar, ab, ag := s.getRGBbg(x+relx, y+rely/2+q)
-				cr := ((65535-a)/65535)*(uint32(ab)<<8) + (a/65535)*r
-				cg := ((65535-a)/65535)*(uint32(ar)<<8) + (a/65535)*g
-				cb := ((65535-a)/65535)*(uint32(ag)<<8) + (a/65535)*b
-				s.SetBg(x+relx, y+rely/2+q, termbox.RGBToAttribute(uint8(cr>>8), uint8(cg>>8), uint8(cb>>8)))
-			}*/
+			}
 			r, g, b, a = img.At(x, 2*y+z).RGBA()
 			r, g, b = r, g, b
 			if (a >> 8) >= 127 {
 				s.SetFg(x+relx, y+rely/2, termbox.RGBToAttribute(uint8(r>>8), uint8(g>>8), uint8(b>>8)))
-			} /*else {
-				ar, ab, ag := s.getRGBfg(x+relx, y+rely/2)
-				cr := ((65535-a)/65535)*(uint32(ab)<<8) + (a/65535)*r
-				cg := ((65535-a)/65535)*(uint32(ar)<<8) + (a/65535)*g
-				cb := ((65535-a)/65535)*(uint32(ag)<<8) + (a/65535)*b
-				s.SetFg(x+relx, y+rely/2, termbox.RGBToAttribute(uint8(cr>>8), uint8(cg>>8), uint8(cb>>8)))
-
-			}*/
+			}
 		}
 	}
 }
