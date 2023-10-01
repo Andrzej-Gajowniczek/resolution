@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
 	"image"
 	_ "image/png"
 	"log"
@@ -68,11 +69,12 @@ func (s *screenBuffer) initBufferGrid() {
 }
 func (s *screenBuffer) swapRGB() {
 	f := s.bufDraw
+	var x, y int
 	if f >= s.animFr {
 		f = f - s.animFr
 	}
-	for y := 0; y < s.yM; y++ {
-		for x := 0; x < s.xM; x++ {
+	for y = 0; y < s.yM; y++ {
+		for x = 0; x < s.xM; x++ {
 			r, g, b := termbox.AttributeToRGB(s.frame[f][x][y].Bg)
 			s.frame[f][x][y].Bg = termbox.RGBToAttribute(b, r, g)
 			r, g, b = termbox.AttributeToRGB(s.frame[f][x][y].Fg)
@@ -139,16 +141,26 @@ func (scBf *screenBuffer) SetFgBg(x, y int, fg, bg termbox.Attribute) {
 
 // copy2termboxBuffer makes a copy of certain buffer to termbox virtual screen
 func (scBf *screenBuffer) copy2termboxBuffer(f int) {
+	var i, j int
+	//	var v *[][]termbox.Cell
+	q := scBf.frame[f][0][0]
 	if f >= scBf.animFr {
 		f = f - scBf.animFr
 	}
+	/*
+		scBf.bufCopy = f
+		for i, v := range scBf.frame[f] {
+			for j, q := range v {
 
-	scBf.bufCopy = f
-	for i, v := range scBf.frame[f] {
-		for j, q := range v {
+				termbox.SetCell(i, j, q.Ch, q.Fg, q.Bg)
 
+			}
+
+		}*/
+	for j = 0; j < scBf.yM; j++ {
+		for i = 0; i < scBf.xM; i++ {
+			q = scBf.frame[f][i][j]
 			termbox.SetCell(i, j, q.Ch, q.Fg, q.Bg)
-
 		}
 
 	}
@@ -240,8 +252,13 @@ func main() {
 	jt := len(yCosine) / 12
 	edgeX := len(xSine) - 1
 	edgeY := len(yCosine) - 1
-	frame := 0
 
+	var i, frame, licznik int
+	var v rune
+	var informacja string
+	informacja = informacja
+	i, frame, licznik = i, frame, licznik
+	v = v
 	for {
 		start := time.Now()
 		//imgG = imgG
@@ -261,7 +278,14 @@ func main() {
 
 		}
 
+		licznik++
+		informacja = fmt.Sprintf("frame:% 6d", licznik)
+		for i, v = range informacja {
+			termbox.SetCell(i, 0, v, termbox.RGBToAttribute(255, 0, 0), 0)
+		}
+
 		termbox.Flush()
+		//termbox.Clear(0, 0)
 		tBuffer.swapRGB()
 
 		duration := time.Since(start)
@@ -281,8 +305,8 @@ func main() {
 			jt = jt - edgeY
 		}
 
-		if frame >= tBuffer.animFr {
-			frame = frame - tBuffer.animFr
+		if frame == tBuffer.animFr {
+			frame = 0
 		}
 
 	}
@@ -290,12 +314,13 @@ func main() {
 
 func (s *screenBuffer) drawBall(relx, rely int, img image.Image) {
 	var r, g, b, a uint32
-	for y := 0; y < 8; y++ {
+	var x, y int
+	for y = 0; y < 8; y++ {
 		z, q := 1, 0
 		if rely%2 == 1 {
 			z, q = q, z
 		}
-		for x := 0; x < 16; x++ {
+		for x = 0; x < 16; x++ {
 			r, g, b, a = img.At(x, 2*y+q).RGBA()
 			r, g, b = r, g, b
 			if (a >> 8) >= 127 {
