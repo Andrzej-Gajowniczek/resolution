@@ -28,12 +28,30 @@ func (b *ByteReadCloser) Close() error {
 	return nil
 }
 
+type pixelRGBA32 struct {
+	r uint32
+	g uint32
+	b uint32
+	a uint32
+}
+type pixelRGBA8 struct {
+	r uint8
+	g uint8
+	b uint8
+	a uint8
+}
 type screenBuffer struct {
-	animFr  int
-	bufDraw int
-	bufCopy int
-	xM, yM  int
-	frame   [9][][]termbox.Cell
+	animFr    int
+	bufDraw   int
+	bufCopy   int
+	xM, yM    int
+	imgPixels [16][16]pixelRGBA32
+	img8      [16][16]pixelRGBA8
+	frame     [9][][]termbox.Cell
+	r         uint8
+	g         uint8
+	b         uint8
+	a         uint8
 }
 
 func (s *screenBuffer) initBufferGrid() {
@@ -137,6 +155,7 @@ func (scBf *screenBuffer) copy2termboxBuffer(f int) {
 }
 func main() {
 	//initialization of termbox
+	//debug.SetGCPercent(-1)
 	err := termbox.Init()
 	if err != nil {
 		log.Println("init error", err)
@@ -176,7 +195,21 @@ func main() {
 	if err != nil {
 		log.Fatalln("Cannot decode file:", err)
 	}
+	//fill pixelRGBA32 and pixelRGBA8
 
+	for i := 0; i < 16; i++ {
+		for j := 0; j < 16; j++ {
+			r, g, b, a := imgG.At(i, j).RGBA()
+			tBuffer.imgPixels[i][j].r = r
+			tBuffer.imgPixels[i][j].g = g
+			tBuffer.imgPixels[i][j].b = b
+			tBuffer.imgPixels[i][j].a = a
+			tBuffer.img8[i][j].r = uint8(r >> 8)
+			tBuffer.img8[i][j].g = uint8(g >> 8)
+			tBuffer.img8[i][j].b = uint8(b >> 8)
+			tBuffer.img8[i][j].a = uint8(a >> 8)
+		}
+	}
 	//create sine cosine tables for Lissajous figures
 	var o float64
 	pi2 := 2 * math.Pi
@@ -208,10 +241,9 @@ func main() {
 	edgeX := len(xSine) - 1
 	edgeY := len(yCosine) - 1
 	frame := 0
-	start := time.Now()
 
 	for {
-
+		start := time.Now()
 		//imgG = imgG
 		//rysujKule(int(xSine[it]), int(yCosine[jt]), imgG)
 		tBuffer.setFrame2Draw(frame)
@@ -228,18 +260,19 @@ func main() {
 			jt = jt - edgeY
 
 		}
-		duration := time.Since(start)
-		var limit int64 = 16666
-		spent := duration.Microseconds()
-		if (limit - spent) > 100 {
-			wait := time.Duration(limit-spent) * time.Microsecond
-			time.Sleep(wait)
-		}
-		start = time.Now()
+
 		termbox.Flush()
 		tBuffer.swapRGB()
 
+		duration := time.Since(start)
+		var limit int64 = 16666
+		spent := duration.Microseconds()
+		if (limit - spent) > 33 {
+			wait := time.Duration(limit-spent) * time.Microsecond
+			time.Sleep(wait)
+		}
 		//control indices
+
 		if it > edgeX {
 			it = it - edgeX
 		}
@@ -256,14 +289,14 @@ func main() {
 }
 
 func (s *screenBuffer) drawBall(relx, rely int, img image.Image) {
-
+	var r, g, b, a uint32
 	for y := 0; y < 8; y++ {
 		z, q := 1, 0
 		if rely%2 == 1 {
 			z, q = q, z
 		}
 		for x := 0; x < 16; x++ {
-			r, g, b, a := img.At(x, 2*y+q).RGBA()
+			r, g, b, a = img.At(x, 2*y+q).RGBA()
 			r, g, b = r, g, b
 			if (a >> 8) >= 127 {
 				s.SetBg(x+relx, y+rely/2+q, termbox.RGBToAttribute(uint8(r>>8), uint8(g>>8), uint8(b>>8)))
@@ -276,3 +309,56 @@ func (s *screenBuffer) drawBall(relx, rely int, img image.Image) {
 		}
 	}
 }
+
+/*
+func (s *screenBuffer) drawBall(relx, rely int, img *image.Image) {
+	for y := 0; y < 8; y++ {
+		z, q := 1, 0
+		if rely%2 == 1 {
+			z, q = q, z
+		}
+		for x := 0; x < 16; x++ {
+			r, g, b, a := (*img).At(x, 2*y+q).RGBA()
+			r, g, b, a = r>>8, g>>8, b>>8, a>>8
+			if a >= 127 {
+				s.SetBg(x+relx, y+rely/2+q, termbox.RGBToAttribute(uint8(r), uint8(g), uint8(b)))
+			}
+			r, g, b, a = (*img).At(x, 2*y+z).RGBA()
+			r, g, b, a = r>>8, g>>8, b>>8, a>>8
+			if a >= 127 {
+				s.SetFg(x+relx, y+rely/2, termbox.RGBToAttribute(uint8(r), uint8(g), uint8(b)))
+			}
+		}
+	}
+}
+*/
+/*
+func (s *screenBuffer) drawBall(relx, rely int) {
+	for y := 0; y < 8; y++ {
+		z, q := 1, 0
+		if rely%2 == 1 {
+			z, q = q, z
+		}
+		for x := 0; x < 16; x++ {
+			//r, g, b, a := img.At(x, 2*y+q).RGBA()
+			s.r = s.img8[x][2*y+q].r
+			s.g = s.img8[x][2*y+q].g
+			s.b = s.img8[x][2*y+q].b
+			s.a = s.img8[x][2*y+q].a
+			//r, g, b, a = r>>8, g>>8, b>>8, a>>8
+			if s.a >= 127 {
+				s.SetBg(x+relx, y+rely/2+q, termbox.RGBToAttribute(s.r, s.g, s.b))
+			}
+			//r, g, b, a = img.At(x, 2*y+z).RGBA()
+			s.r = s.img8[x][2*y+z].r
+			s.g = s.img8[x][2*y+z].g
+			s.b = s.img8[x][2*y+z].b
+			s.a = s.img8[x][2*y+z].a
+			//r, g, b, a = r>>8, g>>8, b>>8, a>>8
+			if s.a >= 127 {
+				s.SetFg(x+relx, y+rely/2, termbox.RGBToAttribute(s.r, s.g, s.b))
+			}
+		}
+	}
+}
+*/
