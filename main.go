@@ -184,7 +184,7 @@ func main() {
 	var yCosine []float64 //cos table
 	xHrange := float64(xM-16) / 2
 	yHrange := float64(yM - 8)
-	piXstep := pi2 / (float64(xM - 16)) / 4 //data density
+	piXstep := pi2 / (float64(xM - 16)) / 2 //data density
 	piYstep := pi2 / (float64(yM - 8)) / 8  //data density
 
 	for o = 0; o < pi2; o += piXstep {
@@ -212,13 +212,11 @@ func main() {
 
 	for {
 
-		//imgG = imgG
-		//rysujKule(int(xSine[it]), int(yCosine[jt]), imgG)
 		tBuffer.setFrame2Draw(frame)
 		tBuffer.drawBall(int(xSine[it]), int(yCosine[jt]), imgG)
 		tBuffer.copy2termboxBuffer(frame)
 		frame++     //next frame animation
-		it = it + 2 //x sine frequency
+		it = it + 1 //x sine frequency
 		if it > edgeX {
 			it = it - edgeX
 		}
